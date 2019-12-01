@@ -1,4 +1,5 @@
 import React , { useState, useEffect } from 'react';
+import axios from 'axios';
 import _ from 'lodash';
 import './App.css';
 import { EditingState, IntegratedEditing, ViewState } from '@devexpress/dx-react-scheduler';
@@ -8,23 +9,44 @@ import uuidv1 from  'uuid/v1';
 function App() {
 
     const [data, setData] = useState([]);
+    const [pageLoad,setPageLoad] = useState(true);
+    useEffect(() => {
+        if (pageLoad)
+        {
+            axios.get(
+                process.env.REACT_APP_SCHEDULER + "/getAllSchedules",
+            ).then(result => {
+                if (result && result.data && !_.isEqual(result.data.sort(), data.sort())) {
+                    setData(result.data);
+                    setPageLoad(false);
+                }
+            }).catch(err => {
+                console.log("Error fetching schedules");
+            })
+        }
+    },[data,setData,pageLoad,setPageLoad]);
 
     const [appointment, setAppointment] = useState();
     useEffect(() => {
         // Update the document title using the browser API
         if(appointment && appointment.added) {
             if(!_.isEmpty(appointment.added.title)&&!_.isEmpty(appointment.added.location)){
-                setData(data => data.concat({id:uuidv1(), ...appointment.added }));
+                let newId = uuidv1();
+                setData(data => data.concat({id:newId, ...appointment.added }));
+                axios.post(process.env.REACT_APP_SCHEDULER+"/createSchedules",{id:newId, ...appointment.added });
             }
         }
         else if(appointment && appointment.changed){
             setData(data => _.map(data, (changedAppointment) => {
                 return Object.keys(appointment.changed)[0]===changedAppointment.id ? {...changedAppointment,...appointment.changed[Object.keys(appointment.changed)[0]]} : changedAppointment;
             }));
+            axios.put(process.env.REACT_APP_SCHEDULER+"/updateSchedules",{filter:{id:Object.keys(appointment.changed)[0]},update:{...appointment.changed[Object.keys(appointment.changed)[0]]}})
+                .catch(err => console.log("updated schedule error: " + JSON.stringify(err)));
         }else if(appointment && appointment.deleted){
             setData(data => _.filter(data, (deletedAppointment) => {
                 return deletedAppointment.id !== appointment.deleted;
             }));
+            axios.delete(process.env.REACT_APP_SCHEDULER+"/deleteSchedules",{data:{id:appointment.deleted}});
         }
     },[appointment]);
 
